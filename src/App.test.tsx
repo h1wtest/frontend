@@ -235,3 +235,56 @@ it('reconciles an unrelated live session after resetting another account instead
     expect(screen.getByText('A@example.test', { selector: 'header span' })).toBeTruthy(),
   );
 });
+it('keeps reset reconciliation pending when an older independently delayed session check finishes', async () => {
+  window.history.replaceState(null, '', '/?token=reset-other-account');
+  const user = userEvent.setup();
+  render(<App />);
+  await screen.findByLabelText('Одноразовый токен из письма');
+  await user.type(screen.getByLabelText('Новый пароль'), 'new-password-123');
+  const previous = {
+    started: Promise.withResolvers<void>(),
+    resume: Promise.withResolvers<void>(),
+  };
+  pausedMe = previous;
+  fireEvent.focus(window);
+  await previous.started.promise;
+  const previousResponse = observedMe;
+  const reconciliation = {
+    started: Promise.withResolvers<void>(),
+    resume: Promise.withResolvers<void>(),
+  };
+  pausedMe = reconciliation;
+  await user.click(screen.getByRole('button', { name: 'Сбросить пароль' }));
+  await reconciliation.started.promise;
+  const reconciliationResponse = observedMe;
+  await act(async () => {
+    previous.resume.resolve();
+    await previousResponse;
+  });
+  expect(screen.getByRole('status').textContent).toContain('Проверка сессии');
+  expect(screen.queryByRole('button', { name: 'Войти' })).toBeNull();
+  expect(screen.queryByLabelText('Отображаемое имя')).toBeNull();
+  expect(screen.queryByLabelText('Одноразовый токен из письма')).toBeNull();
+  await act(async () => {
+    reconciliation.resume.resolve();
+    await reconciliationResponse;
+  });
+  await waitFor(() =>
+    expect((screen.getByLabelText('Отображаемое имя') as HTMLInputElement).value).toBe('Name A'),
+  );
+});
+it('finishes the loading boundary when an explicit session expiry supersedes a pending bootstrap', async () => {
+  const gate = { started: Promise.withResolvers<void>(), resume: Promise.withResolvers<void>() };
+  pausedMe = gate;
+  render(<App />);
+  await gate.started.promise;
+  fireEvent(window, new Event('session-expired'));
+  await screen.findByRole('button', { name: 'Войти' });
+  expect(screen.queryByText('Проверка сессии…')).toBeNull();
+  await act(async () => {
+    gate.resume.resolve();
+    await observedMe;
+  });
+  expect(screen.queryByLabelText('Отображаемое имя')).toBeNull();
+  expect(screen.getByRole('button', { name: 'Войти' })).toBeTruthy();
+});

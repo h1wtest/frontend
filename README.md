@@ -40,6 +40,8 @@ Password-reset links render even while an account is signed in; their token is r
 
 API responses and pending CSRF bootstrap belong to the session that started them: delayed failures cannot expire a newer account or run an old queued mutation with its credentials. Password-reset completion discards scoped UI/OIDC state and rechecks the actual cookie session. Resetting another account does not claim to log out an unrelated live session; resetting the current account returns to login after the server confirms its revocation.
 
+Only the current authoritative session check can finish its loading boundary; a superseded pre-reset response cannot expose a login form while reset reconciliation is still pending. Explicit session expiry ends that boundary and presents login immediately.
+
 ## Actual OIDC consumer
 
 Open **OIDC-потребитель → Начать OIDC-вход**, logged in or logged out. Public client **web-demo**, exact callback **https://localhost:8448/oidc/callback**. The library performs discovery with exact issuer verification, state, PKCE S256, nonce, RS256 algorithm pinning, ID token issuer/audience/timestamps, **explicit JWKS signature verification**, and matching UserInfo `sub`. The proof view shows validated public claims, not raw tokens. Refresh is a real `refresh_token` grant with rotation, signature/claim and subject continuity checks. Refresh calls are single-flight; any failure clears tokens. Fresh ID tokens on refresh cannot change authenticated subject/issuer/audience/auth_time/nonce. An omitted refresh ID token retains the already validated identity and verifies UserInfo again.

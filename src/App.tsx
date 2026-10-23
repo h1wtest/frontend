@@ -55,7 +55,7 @@ export default function App() {
         throw error;
       }
     } finally {
-      setLoading(false);
+      if (sequence === requestSequence.current) setLoading(false);
     }
   }
   useEffect(() => {
@@ -67,6 +67,7 @@ export default function App() {
       clearOidcContext(!hadSession);
       setAuth(undefined);
       setExpired(true);
+      setLoading(false);
     };
     window.addEventListener('session-expired', invalidate);
     void reload().catch(() => {});
