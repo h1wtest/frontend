@@ -1,0 +1,44 @@
+name: Frontend verification
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Scan tracked history for secrets
+        run: docker run --rm -v "$PWD:/repo:ro" zricethezav/gitleaks:v8.30.1@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f git /repo --redact --no-banner
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: '22.22.1'
+          cache: npm
+      - name: Install pinned npm toolchain
+        run: npm install --global npm@11.19.0 --ignore-scripts --no-audit --no-fund
+      - name: Install locked dependencies
+        run: npm ci --ignore-scripts --no-fund
+      - name: Correctness lint and formatting
+        run: |
+          npm run lint
+          npm run format:check
+      - name: Behavioral regressions
+        run: npm test
+      - name: Typecheck and production bundle
+        run: npm run build
+      - name: Dependency vulnerability gate
+        run: npm audit --audit-level=low
+      - name: Secret and container scan
+        env:
+          TRIVY: aquasec/trivy:0.76.1@sha256:790fd66d1697395d8693d1acaa1ea702406a20f109b6fc7bac8db623eca6c06c
+        run: |
+          docker run --rm -v "$PWD:/repo:ro" -v "$RUNNER_TEMP:/reports" "$TRIVY" fs --scanners secret --format json --output /reports/frontend-secrets.json --exit-code 1 /repo
+          docker build --tag "sso-frontend:${GITHUB_SHA}" .
+          docker save "sso-frontend:${GITHUB_SHA}" --output /tmp/frontend-image.tar
+          docker run --rm -v /tmp/frontend-image.tar:/image.tar:ro "$TRIVY" image --input /image.tar --scanners vuln --exit-code 1

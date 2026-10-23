@@ -1,22 +1,41 @@
 {
   "name": "sso-frontend",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
+  "engines": {
+    "node": ">=22.13.0"
+  },
   "scripts": {
-    "dev": "vite",
+    "dev": "vite --host 0.0.0.0",
     "build": "tsc && vite build",
+    "test": "vitest run",
+    "lint": "eslint src vite.config.ts eslint.config.js --max-warnings 0",
+    "format:check": "prettier --check src vite.config.ts eslint.config.js package.json tsconfig.json index.html .github/workflows/verify.yml .prettierrc.json",
+    "format": "prettier --write src vite.config.ts eslint.config.js package.json tsconfig.json index.html .github/workflows/verify.yml .prettierrc.json",
     "preview": "vite preview"
   },
   "dependencies": {
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "oauth4webapi": "3.8.8",
+    "react": "18.3.1",
+    "react-dom": "18.3.1"
   },
   "devDependencies": {
-    "@types/react": "^18.3.18",
-    "@types/react-dom": "^18.3.5",
-    "@vitejs/plugin-react": "^4.3.4",
-    "typescript": "^5.7.3",
-    "vite": "^6.2.0"
+    "@eslint/js": "10.0.1",
+    "eslint": "10.13.0",
+    "eslint-plugin-react-hooks": "7.1.1",
+    "prettier": "3.9.10",
+    "typescript-eslint": "8.72.0",
+    "@testing-library/react": "16.3.0",
+    "@testing-library/user-event": "14.6.1",
+    "@types/node": "22.19.1",
+    "@types/react": "18.3.18",
+    "@types/react-dom": "18.3.5",
+    "@vitejs/plugin-react": "6.1.2",
+    "jsdom": "26.1.0",
+    "jose": "6.2.8",
+    "typescript": "5.9.3",
+    "vite": "8.3.5",
+    "vitest": "5.0.5"
   }
 }
