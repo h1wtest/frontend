@@ -84,7 +84,7 @@ export function safeReturnTo(value: string | null, origin: string): string | nul
   if (!value || value.includes('\\')) return null;
   for (let index = 0; index < value.length; index++) {
     const code = value.charCodeAt(index);
-    if (code === 0 || code === 10 || code === 13) return null;
+    if (code <= 31 || code === 127) return null;
   }
   try {
     const url = new URL(value, origin);

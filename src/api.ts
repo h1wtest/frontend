@@ -16,30 +16,52 @@ type Request = {
 export class ApiClient {
   private csrf = '';
   private csrfRequest: Promise<void> | undefined;
+  private sessionId: string | null | undefined;
+  private generation = 0;
   constructor(
     private origin = globalThis.location?.origin ?? '',
     private expired: () => void = () => {},
   ) {}
-  setCsrf(value: string) {
-    this.csrf = value;
+  setSession(sessionId: string | null, csrf = '') {
+    if (this.sessionId !== sessionId) {
+      this.generation++;
+      this.csrfRequest = undefined;
+      this.sessionId = sessionId;
+    }
+    this.csrf = csrf;
+  }
+  private assertCurrent(generation: number) {
+    if (generation !== this.generation)
+      throw new ApiError(
+        'Контекст авторизации изменился. Повторите действие.',
+        0,
+        'auth_context_changed',
+      );
   }
   private async bootstrapCsrf() {
     if (this.csrf) return;
-    this.csrfRequest ??= this.request<{ csrf_token: string }>('/api/v1/auth/csrf')
-      .then((value) => {
-        this.csrf = value.csrf_token;
-      })
-      .finally(() => {
-        this.csrfRequest = undefined;
-      });
+    if (!this.csrfRequest) {
+      const generation = this.generation;
+      const request = this.request<{ csrf_token: string }>('/api/v1/auth/csrf')
+        .then((value) => {
+          this.assertCurrent(generation);
+          this.csrf = value.csrf_token;
+        })
+        .finally(() => {
+          if (this.csrfRequest === request) this.csrfRequest = undefined;
+        });
+      this.csrfRequest = request;
+    }
     await this.csrfRequest;
     if (!this.csrf) throw new Error('Сервер не выдал CSRF-токен. Обновите страницу.');
   }
   async request<T = unknown>(path: string, options: Request = {}): Promise<T> {
     if (!path.startsWith('/api/v1/') || path.startsWith('//') || /[\\\r\n]/.test(path))
       throw new Error('Недопустимый адрес API');
+    const generation = this.generation;
     const method = options.method ?? 'GET';
     if (method !== 'GET') await this.bootstrapCsrf();
+    this.assertCurrent(generation);
     const headers = new Headers({ Accept: 'application/json' });
     if (options.body !== undefined) headers.set('Content-Type', 'application/json');
     if (method !== 'GET') headers.set('X-CSRF-Token', this.csrf);
@@ -56,9 +78,10 @@ export class ApiClient {
       response.status === 204
         ? null
         : ((await response.json().catch(() => null)) as Record<string, unknown> | null);
+    this.assertCurrent(generation);
     if (!response.ok) {
       if (response.status === 401) {
-        this.csrf = '';
+        this.setSession(null);
         this.expired();
       }
       throw new ApiError(

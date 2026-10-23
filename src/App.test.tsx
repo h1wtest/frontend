@@ -2,7 +2,7 @@
 import { afterAll, afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest';
 import { createServer, type Server } from 'node:http';
 import { once } from 'node:events';
-import { cleanup, render, screen, waitFor, fireEvent } from '@testing-library/react';
+import { act, cleanup, render, screen, waitFor, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import App from './App';
 let server: Server;
@@ -12,7 +12,7 @@ interface Gate {
   promise: Promise<void>;
   resolve: () => void;
 }
-let pausedMe: { started: Gate; resume: Gate } | undefined;
+let pausedMe: { started: Gate; resume: Gate; unauthorized?: boolean } | undefined;
 let observedMe: Promise<void> | undefined;
 const nativeFetch = globalThis.fetch;
 beforeAll(async () => {
@@ -20,13 +20,15 @@ beforeAll(async () => {
     res.setHeader('content-type', 'application/json');
     if (req.url === '/api/v1/auth/me') {
       const authenticatedAccount = account;
+      let unauthorized = !authenticatedAccount;
       if (pausedMe) {
         const gate = pausedMe;
         pausedMe = undefined;
         gate.started.resolve();
         await gate.resume.promise;
+        unauthorized ||= gate.unauthorized ?? false;
       }
-      if (!account) {
+      if (unauthorized) {
         res.statusCode = 401;
         return res.end('{"error":"Unauthenticated","code":"unauthenticated"}');
       }
@@ -76,7 +78,13 @@ beforeAll(async () => {
       let raw = '';
       for await (const part of req) raw += part;
       const body = JSON.parse(raw);
-      if (body.token === 'reset-once' && body.password === 'new-password-123') return res.end('{}');
+      if (body.password === 'new-password-123') {
+        if (body.token === 'reset-once') {
+          account = '';
+          return res.end('{}');
+        }
+        if (body.token === 'reset-other-account') return res.end('{}');
+      }
     }
     res.statusCode = 400;
     res.end('{"error":"Invalid request"}');
@@ -89,6 +97,8 @@ beforeAll(async () => {
 });
 beforeEach(() => {
   account = 'A';
+  pausedMe = undefined;
+  observedMe = undefined;
   sessionStorage.clear();
   window.history.replaceState(null, '', '/');
   vi.stubGlobal('fetch', ((input, options) => {
@@ -170,4 +180,58 @@ it('never restores authenticated state from a delayed me response after session 
   await screen.findByRole('button', { name: 'Войти' });
   await waitFor(() => expect(screen.queryByLabelText('Отображаемое имя')).toBeNull());
   expect(screen.queryByText('A@example.test')).toBeNull();
+});
+it('does not let a delayed old-session 401 expire the newly accepted account', async () => {
+  render(<App />);
+  await screen.findByLabelText('Отображаемое имя');
+  const gate = {
+    started: Promise.withResolvers<void>(),
+    resume: Promise.withResolvers<void>(),
+    unauthorized: true,
+  };
+  pausedMe = gate;
+  fireEvent.focus(window);
+  await gate.started.promise;
+  account = 'B';
+  fireEvent.focus(window);
+  await waitFor(() =>
+    expect((screen.getByLabelText('Отображаемое имя') as HTMLInputElement).value).toBe('Name B'),
+  );
+  await act(async () => {
+    gate.resume.resolve();
+    await observedMe;
+  });
+  await waitFor(() => {
+    expect(screen.getByText('B@example.test', { selector: 'header span' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Войти' })).toBeNull();
+    expect(screen.queryByText('A@example.test')).toBeNull();
+  });
+});
+it('reconciles an unrelated live session after resetting another account instead of inventing logout', async () => {
+  window.history.replaceState(null, '', '/?token=reset-other-account');
+  const user = userEvent.setup();
+  render(<App />);
+  await screen.findByLabelText('Одноразовый токен из письма');
+  await user.type(screen.getByLabelText('Новый пароль'), 'new-password-123');
+  const gate = { started: Promise.withResolvers<void>(), resume: Promise.withResolvers<void>() };
+  pausedMe = gate;
+  await user.click(screen.getByRole('button', { name: 'Сбросить пароль' }));
+  await gate.started.promise;
+  expect(screen.getByRole('status').textContent).toContain('Проверка сессии');
+  expect(screen.queryByLabelText('Отображаемое имя')).toBeNull();
+  expect(screen.queryByLabelText('Одноразовый токен из письма')).toBeNull();
+  expect(screen.queryByRole('button', { name: 'Войти' })).toBeNull();
+  await act(async () => {
+    gate.resume.resolve();
+    await observedMe;
+  });
+  await waitFor(() =>
+    expect((screen.getByLabelText('Отображаемое имя') as HTMLInputElement).value).toBe('Name A'),
+  );
+  expect(screen.queryByLabelText('Одноразовый токен из письма')).toBeNull();
+  expect(screen.queryByRole('button', { name: 'Войти' })).toBeNull();
+  fireEvent.focus(window);
+  await waitFor(() =>
+    expect(screen.getByText('A@example.test', { selector: 'header span' })).toBeTruthy(),
+  );
 });

@@ -37,7 +37,7 @@ export default function App() {
       if (identity.current !== undefined && identity.current !== current.session_id)
         clearOidcContext(identity.current === null);
       identity.current = current.session_id;
-      api.setCsrf(current.csrf_token);
+      api.setSession(current.session_id, current.csrf_token);
       setAuth(current);
       setExpired(false);
       setError('');
@@ -46,6 +46,7 @@ export default function App() {
       if (sequence !== requestSequence.current) return null;
       if (identity.current !== undefined) clearOidcContext(identity.current === null);
       identity.current = null;
+      api.setSession(null);
       setAuth(undefined);
       if (error instanceof ApiError && error.status === 401) {
         return null;
@@ -62,6 +63,7 @@ export default function App() {
       requestSequence.current++;
       const hadSession = typeof identity.current === 'string';
       identity.current = null;
+      api.setSession(null);
       clearOidcContext(!hadSession);
       setAuth(undefined);
       setExpired(true);
@@ -99,6 +101,7 @@ export default function App() {
                 await api.request('/api/v1/auth/logout', { method: 'POST', body: {} });
                 requestSequence.current++;
                 identity.current = null;
+                api.setSession(null);
                 clearOidcContext();
                 setAuth(undefined);
                 setExpired(false);
@@ -172,8 +175,11 @@ export default function App() {
                   requestSequence.current++;
                   clearOidcContext();
                   identity.current = null;
+                  api.setSession(null);
                   setAuth(undefined);
+                  setLoading(true);
                   setResetToken(undefined);
+                  await reload();
                 }}
               />
             ) : tab === 'oidc' ? (
