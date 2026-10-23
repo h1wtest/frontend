@@ -24,6 +24,8 @@ jobs:
         run: npm install --global npm@11.19.0 --ignore-scripts --no-audit --no-fund
       - name: Install locked dependencies
         run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Verify generated public contracts
+        run: npm run contracts:check
       - name: Correctness lint and formatting
         run: |
           npm run lint

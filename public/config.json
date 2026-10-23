@@ -1,0 +1,5 @@
+{
+  "brand": { "name": "Account Platform", "logo_url": "", "help_url": "" },
+  "locales": ["en", "ru"],
+  "default_locale": "en"
+}

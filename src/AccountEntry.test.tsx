@@ -6,6 +6,12 @@ import { cleanup, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { AccountEntry } from './AccountEntry';
 import { ApiClient } from './api';
+import { I18nProvider, useI18n } from './i18n';
+
+function LanguageSwitch() {
+  const { setLocale } = useI18n();
+  return <button onClick={() => setLocale('en')}>English</button>;
+}
 
 let server: Server;
 let origin: string;
@@ -16,6 +22,12 @@ beforeAll(async () => {
     let raw = '';
     for await (const part of req) raw += part;
     const body = JSON.parse(raw || '{}');
+    if (
+      req.url === '/api/v1/auth/register' &&
+      body.referral_code === 'PARTNER' &&
+      body.locale === 'en'
+    )
+      return res.end('{"user_id":"registered-user","email":"new@example.test"}');
     if (
       req.url === '/api/v1/auth/login' &&
       body.email === 'user@example.test' &&
@@ -49,12 +61,14 @@ it('finishes MFA using the server challenge and accepts a recovery code without 
   const user = userEvent.setup();
   let authenticated = false;
   render(
-    <AccountEntry
-      client={new ApiClient(origin)}
-      authenticated={async () => {
-        authenticated = true;
-      }}
-    />,
+    <I18nProvider initialLocale="ru">
+      <AccountEntry
+        client={new ApiClient(origin)}
+        authenticated={async () => {
+          authenticated = true;
+        }}
+      />
+    </I18nProvider>,
   );
   await user.type(screen.getByLabelText('Email'), 'user@example.test');
   await user.type(screen.getByLabelText('Пароль'), 'correct-password');
@@ -69,17 +83,67 @@ it('keeps an invalid login anonymous and presents the real server error for corr
   const user = userEvent.setup();
   let authenticated = false;
   render(
-    <AccountEntry
-      client={new ApiClient(origin)}
-      authenticated={async () => {
-        authenticated = true;
-      }}
-    />,
+    <I18nProvider initialLocale="ru">
+      <AccountEntry
+        client={new ApiClient(origin)}
+        authenticated={async () => {
+          authenticated = true;
+        }}
+      />
+    </I18nProvider>,
   );
   await user.type(screen.getByLabelText('Email'), 'wrong@example.test');
   await user.type(screen.getByLabelText('Пароль'), 'wrong-password');
   await user.click(screen.getByRole('button', { name: 'Войти' }));
-  expect((await screen.findByRole('alert')).textContent).toContain('Incorrect credentials');
+  expect((await screen.findByRole('alert')).textContent).toContain(
+    'Неверные учётные данные или код подтверждения',
+  );
   expect(authenticated).toBe(false);
   expect((screen.getByRole('button', { name: 'Войти' }) as HTMLButtonElement).disabled).toBe(false);
+});
+
+it('preserves registration input while changing language and sends referral attribution and selected locale', async () => {
+  const user = userEvent.setup();
+  render(
+    <I18nProvider initialLocale="ru">
+      <LanguageSwitch />
+      <AccountEntry client={new ApiClient(origin)} authenticated={async () => {}} />
+    </I18nProvider>,
+  );
+  await user.click(screen.getByRole('button', { name: 'Регистрация' }));
+  await user.type(screen.getByLabelText('Email'), 'new@example.test');
+  await user.type(screen.getByLabelText('Новый пароль'), 'long-new-password');
+  await user.type(screen.getByLabelText('Реферальный код (необязательно)'), 'PARTNER');
+  await user.click(screen.getByRole('button', { name: 'English' }));
+  expect((screen.getByLabelText('Email') as HTMLInputElement).value).toBe('new@example.test');
+  await user.click(screen.getByRole('button', { name: 'Create account' }));
+  expect(
+    ((await screen.findByLabelText('User ID from registration or email')) as HTMLInputElement)
+      .value,
+  ).toBe('registered-user');
+});
+
+it('opens referral links directly in registration and submits the prefilled referral code', async () => {
+  const previous = window.location.pathname + window.location.search;
+  window.history.replaceState(null, '', '/register?ref=PARTNER');
+  try {
+    const user = userEvent.setup();
+    render(
+      <I18nProvider initialLocale="en">
+        <AccountEntry client={new ApiClient(origin)} authenticated={async () => {}} />
+      </I18nProvider>,
+    );
+    expect((screen.getByLabelText('Referral code (optional)') as HTMLInputElement).value).toBe(
+      'PARTNER',
+    );
+    await user.type(screen.getByLabelText('Email'), 'new@example.test');
+    await user.type(screen.getByLabelText('New password'), 'long-new-password');
+    await user.click(screen.getByRole('button', { name: 'Create account' }));
+    expect(
+      ((await screen.findByLabelText('User ID from registration or email')) as HTMLInputElement)
+        .value,
+    ).toBe('registered-user');
+  } finally {
+    window.history.replaceState(null, '', previous);
+  }
 });

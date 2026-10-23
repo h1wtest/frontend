@@ -356,3 +356,132 @@ footer {
     grid-template-columns: 1fr;
   }
 }
+
+select,
+textarea {
+  font: inherit;
+  display: block;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  min-height: 39px;
+  border: 1px solid #46536a;
+  border-radius: 5px;
+  background: #141b28;
+  color: #edf1f8;
+  padding: 8px 10px;
+}
+textarea {
+  resize: vertical;
+  min-height: 96px;
+}
+select:focus-visible,
+textarea:focus-visible {
+  outline: 3px solid #a5c4ff;
+  outline-offset: 3px;
+}
+.brand,
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+.header-actions {
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+.brand img {
+  object-fit: contain;
+  flex-shrink: 0;
+}
+.language {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+}
+.language select {
+  width: auto;
+}
+.card > section,
+.card > form + form {
+  margin-top: 18px;
+}
+.toolbar,
+.actions,
+.inline-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+  gap: 12px;
+}
+.table-wrap {
+  max-width: 100%;
+  overflow-x: auto;
+}
+table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 14px;
+}
+th,
+td {
+  text-align: left;
+  vertical-align: top;
+  border-bottom: 1px solid #3b4658;
+  padding: 8px;
+  overflow-wrap: anywhere;
+}
+progress {
+  width: 100%;
+  accent-color: #89acff;
+}
+output {
+  overflow-wrap: anywhere;
+}
+.error:empty {
+  display: none;
+}
+@media (max-width: 600px) {
+  .header-actions {
+    width: 100%;
+    justify-content: space-between;
+    align-items: flex-start;
+  }
+  .language {
+    width: 100%;
+    justify-content: space-between;
+  }
+  dl {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 3px;
+  }
+  dd {
+    margin-bottom: 9px;
+  }
+  .tabs {
+    gap: 5px;
+  }
+  .tabs button {
+    padding: 6px 9px;
+    font-size: 14px;
+  }
+  .form-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation: none !important;
+    transition: none !important;
+  }
+}

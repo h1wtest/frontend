@@ -1,4 +1,9 @@
-import React, { useId, useState } from 'react';
+import React, { useId, useRef, useEffect, useState } from 'react';
+import { useI18n, useText } from './i18n';
+const messages = {
+  saved: { en: 'Changes saved.', ru: 'Изменения сохранены.' },
+  working: { en: 'Working…', ru: 'Выполняется…' },
+};
 export function Field({
   label,
   ...props
@@ -24,8 +29,21 @@ export function ActionForm({
   onSubmit: (data: FormData) => Promise<string | void>;
   danger?: boolean;
 }) {
+  const text = useText(messages);
+  const { error: localError } = useI18n();
   const [busy, setBusy] = useState(false);
-  const [feedback, setFeedback] = useState<{ error: boolean; text: string } | null>(null);
+  const [feedback, setFeedback] = useState<{
+    error: boolean;
+    text?: string;
+    cause?: unknown;
+  } | null>(null);
+  const active = useRef(true);
+  useEffect(() => {
+    active.current = true;
+    return () => {
+      active.current = false;
+    };
+  }, []);
   return (
     <form
       aria-label={title ?? submit}
@@ -38,14 +56,11 @@ export function ActionForm({
         setFeedback(null);
         try {
           const message = await onSubmit(data);
-          setFeedback({ error: false, text: message ?? 'Изменения сохранены.' });
+          if (active.current) setFeedback({ error: false, text: message ?? undefined });
         } catch (error) {
-          setFeedback({
-            error: true,
-            text: error instanceof Error ? error.message : 'Не удалось выполнить запрос',
-          });
+          if (active.current) setFeedback({ error: true, cause: error });
         } finally {
-          setBusy(false);
+          if (active.current) setBusy(false);
         }
       }}
     >
@@ -53,7 +68,7 @@ export function ActionForm({
       <fieldset disabled={busy}>
         {children}
         <button className={danger ? 'danger' : 'primary'} type="submit">
-          {busy ? 'Выполняется…' : submit}
+          {busy ? text('working') : submit}
         </button>
       </fieldset>
       {feedback && (
@@ -61,7 +76,7 @@ export function ActionForm({
           role={feedback.error ? 'alert' : 'status'}
           className={feedback.error ? 'error' : 'success'}
         >
-          {feedback.text}
+          {feedback.error ? localError(feedback.cause) : (feedback.text ?? text('saved'))}
         </p>
       )}
     </form>
@@ -76,8 +91,17 @@ export function ActionButton({
   action: () => Promise<unknown>;
   danger?: boolean;
 }) {
+  const text = useText(messages);
+  const { error: localError } = useI18n();
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
+  const [failure, setFailure] = useState<{ cause: unknown }>();
+  const active = useRef(true);
+  useEffect(() => {
+    active.current = true;
+    return () => {
+      active.current = false;
+    };
+  }, []);
   return (
     <span className="action">
       <button
@@ -85,32 +109,37 @@ export function ActionButton({
         className={danger ? 'danger' : ''}
         disabled={busy}
         onClick={async () => {
+          if (busy) return;
           setBusy(true);
-          setError('');
+          setFailure(undefined);
           try {
             await action();
           } catch (error) {
-            setError(error instanceof Error ? error.message : 'Ошибка запроса');
+            if (active.current) setFailure({ cause: error });
           } finally {
-            setBusy(false);
+            if (active.current) setBusy(false);
           }
         }}
       >
-        {busy ? 'Выполняется…' : children}
+        {busy ? text('working') : children}
       </button>
-      {error && (
+      {failure && (
         <span role="alert" className="error">
-          {error}
+          {localError(failure.cause)}
         </span>
       )}
     </span>
   );
 }
 export const value = (form: FormData, name: string) => String(form.get(name) ?? '');
-export function Time({ value: timestamp }: { value?: string }) {
+export function Time({ value: timestamp }: { value?: string | null }) {
+  const { locale } = useI18n();
+  const date = timestamp ? new Date(timestamp) : null;
   return (
-    <time dateTime={timestamp}>
-      {timestamp ? new Date(timestamp).toLocaleString('ru-RU') : '—'}
+    <time dateTime={timestamp ?? undefined}>
+      {date && !Number.isNaN(date.getTime())
+        ? new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeStyle: 'short' }).format(date)
+        : '—'}
     </time>
   );
 }

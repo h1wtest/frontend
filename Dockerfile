@@ -5,6 +5,10 @@ COPY package.json package-lock.json ./
 RUN npm ci --ignore-scripts --no-audit --no-fund
 COPY tsconfig.json vite.config.ts index.html ./
 COPY src ./src
+COPY public ./public
+COPY scripts/verify-contracts.mjs ./scripts/verify-contracts.mjs
+COPY contracts-types.sha256 ./contracts-types.sha256
+RUN node scripts/verify-contracts.mjs
 RUN npm run build
 
 FROM nginxinc/nginx-unprivileged:1.30-alpine@sha256:f5116ed4606f3eb015dd4a8e28cb9b351476dc0ad4bc6e9f93b19cec130cdf03

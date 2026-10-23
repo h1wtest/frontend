@@ -8,6 +8,8 @@
   },
   "scripts": {
     "dev": "vite --host 0.0.0.0",
+    "contracts:sync": "node scripts/sync-contracts.mjs",
+    "contracts:check": "node scripts/verify-contracts.mjs",
     "build": "tsc && vite build",
     "test": "vitest run",
     "lint": "eslint src vite.config.ts eslint.config.js --max-warnings 0",

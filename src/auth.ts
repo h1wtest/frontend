@@ -26,6 +26,10 @@ export interface Session {
   user_agent: string;
   created_at: string;
   last_active_at: string;
+  expires_at?: string;
+  browser?: string;
+  os?: string;
+  device_label?: string;
   is_current: boolean;
 }
 export interface Settings {

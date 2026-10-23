@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { ActionButton, Time } from './components';
 import { OidcConsumer, type OidcProof } from './oidc';
+import { useText } from './i18n';
+import { identityMessages } from './identity-resources';
 const consumer = new OidcConsumer();
 // React development StrictMode may remount effects; a callback must be exchanged exactly once.
 let callbackRequest: Promise<OidcProof> | undefined;
@@ -9,6 +11,7 @@ export function clearOidcContext(preserveTransaction = false) {
   consumer.clear(preserveTransaction);
 }
 export function OidcPanel() {
+  const t = useText(identityMessages);
   const [proof, setProof] = useState<OidcProof>();
   const [error, setError] = useState('');
   const [pending, setPending] = useState(window.location.pathname === '/oidc/callback');
@@ -17,6 +20,7 @@ export function OidcPanel() {
       consumer.onClear(() => {
         setProof(undefined);
         setPending(false);
+        setError('');
         callbackRequest = undefined;
       }),
     [],
@@ -31,8 +35,8 @@ export function OidcPanel() {
       .then((result) => {
         if (active) setProof(result);
       })
-      .catch((error) => {
-        if (active) setError(error instanceof Error ? error.message : 'OIDC проверка не пройдена');
+      .catch(() => {
+        if (active) setError('oidcFailed');
       })
       .finally(() => {
         if (active) setPending(false);
@@ -43,53 +47,48 @@ export function OidcPanel() {
   }, []);
   return (
     <section className="card">
-      <h2>OIDC: стандартный потребитель</h2>
-      <p>
-        Публичный клиент <code>web-demo</code>, Authorization Code + PKCE S256. Реальная проверка
-        discovery, подписи RS256 через JWKS, issuer, audience, nonce, state и subject UserInfo
-        библиотекой oauth4webapi.
-      </p>
-      <p className="muted">
-        Access/refresh tokens хранятся только в памяти этой вкладки, не отображаются и исчезнут при
-        перезагрузке. В sessionStorage сохраняется лишь одноразовая транзакция PKCE на 10 минут.
-      </p>
+      <h2>{t('oidc')}</h2>
+      <p>{t('oidcDescription')}</p>
+      <p className="muted">{t('oidcMemory')}</p>
       <ActionButton
         action={async () => {
           callbackRequest = undefined;
-          window.location.assign(await consumer.begin());
+          try {
+            window.location.assign(await consumer.begin());
+          } catch {
+            setError('oidcFailed');
+          }
         }}
       >
-        Начать OIDC-вход
+        {t('beginOidc')}
       </ActionButton>
-      {pending && <p role="status">Проверка callback, подписи и UserInfo…</p>}
+      {pending && <p role="status">{t('checkingOidc')}</p>}
       {error && (
         <p role="alert" className="error">
-          {error}
+          {t('oidcFailed')}
         </p>
       )}
       {proof && (
         <>
           <p role="status" className="success">
-            {proof.refreshed
-              ? 'Refresh rotation и повторная проверка выполнены.'
-              : 'OIDC подтверждён: подпись и claims проверены.'}
+            {t(proof.refreshed ? 'oidcRefreshed' : 'oidcVerified')}
           </p>
           <dl>
-            <dt>Issuer</dt>
+            <dt>{t('issuer')}</dt>
             <dd>{proof.claims.iss}</dd>
-            <dt>Subject</dt>
+            <dt>{t('subject')}</dt>
             <dd>{proof.claims.sub}</dd>
-            <dt>Audience</dt>
+            <dt>{t('audience')}</dt>
             <dd>{String(proof.claims.aud)}</dd>
-            <dt>Email</dt>
-            <dd>{String(proof.userinfo.email ?? 'Scope не предоставлен')}</dd>
-            <dt>Срок access token</dt>
+            <dt>{t('email')}</dt>
+            <dd>{String(proof.userinfo.email ?? t('scopeMissing'))}</dd>
+            <dt>{t('tokenExpiry')}</dt>
             <dd>
               <Time value={new Date(proof.expiresAt).toISOString()} />
             </dd>
           </dl>
           <details>
-            <summary>Проверенные публичные claims</summary>
+            <summary>{t('claims')}</summary>
             <pre>
               {JSON.stringify({ id_token: proof.claims, userinfo: proof.userinfo }, null, 2)}
             </pre>
@@ -99,16 +98,16 @@ export function OidcPanel() {
               try {
                 setProof(await consumer.refresh());
                 setError('');
-              } catch (error) {
+              } catch {
                 setProof(undefined);
-                throw error;
+                setError('oidcFailed');
               }
             }}
           >
-            Проверить refresh rotation
+            {t('refreshOidc')}
           </ActionButton>
           <button type="button" onClick={() => clearOidcContext()}>
-            Удалить OIDC-токены из памяти
+            {t('clearOidc')}
           </button>
         </>
       )}

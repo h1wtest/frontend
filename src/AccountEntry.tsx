@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { api, type ApiClient } from './api';
 import type { LoginResult } from './auth';
 import { ActionForm, Field, value } from './components';
+import { useI18n, useText } from './i18n';
+import { identityMessages } from './identity-resources';
 
 type Mode = 'login' | 'register' | 'verify' | 'forgot' | 'reset';
 export function AccountEntry({
@@ -15,9 +17,17 @@ export function AccountEntry({
   resetToken?: string;
   resetComplete?: () => Promise<void>;
 }) {
+  const t = useText(identityMessages);
+  const { locale } = useI18n();
   const [params] = useState(() => new URLSearchParams(window.location.search));
   const [mode, setMode] = useState<Mode>(
-    resetToken || params.has('token') ? 'reset' : params.has('user_id') ? 'verify' : 'login',
+    resetToken || params.has('token')
+      ? 'reset'
+      : params.has('user_id')
+        ? 'verify'
+        : window.location.pathname === '/register'
+          ? 'register'
+          : 'login',
   );
   const [userId, setUserId] = useState(params.get('user_id') ?? '');
   const [challenge, setChallenge] = useState('');
@@ -29,24 +39,24 @@ export function AccountEntry({
     client.request<T>('/api/v1/auth/' + path, { method: 'POST', body });
   async function finish(result: LoginResult) {
     if (result.status === 'mfa_required') {
-      if (!result.challenge_id) throw new Error('Сервер не выдал MFA challenge');
+      if (!result.challenge_id) throw new Error(t('missingChallenge'));
       setChallenge(result.challenge_id);
-      return 'Введите код приложения-аутентификатора или одноразовый резервный код.';
+      return t('enterMfa');
     }
     await authenticated();
-    return 'Вход выполнен.';
+    return t('signedIn');
   }
   return (
     <section className="card entry">
-      <h2>Учётная запись</h2>
-      <nav className="tabs" aria-label="Авторизация">
+      <h2>{t('account')}</h2>
+      <nav className="tabs" aria-label={t('auth')}>
         {(
           [
-            ['login', 'Вход'],
-            ['register', 'Регистрация'],
-            ['verify', 'Подтверждение email'],
-            ['forgot', 'Забыли пароль?'],
-            ['reset', 'Сброс пароля'],
+            ['login', t('login')],
+            ['register', t('register')],
+            ['verify', t('verify')],
+            ['forgot', t('forgot')],
+            ['reset', t('reset')],
           ] as const
         ).map(([key, label]) => (
           <button
@@ -65,19 +75,19 @@ export function AccountEntry({
       {mode === 'login' && !challenge && (
         <ActionForm
           key="login"
-          submit="Войти"
+          submit={t('signIn')}
           onSubmit={async (form) =>
             finish(
               await post<LoginResult>('login', {
                 email: value(form, 'email'),
                 password: value(form, 'password'),
-                device_name: 'Web browser',
+                device_name: t('webBrowser'),
               }),
             )
           }
         >
           <Field
-            label="Email"
+            label={t('email')}
             name="email"
             type="email"
             autoComplete="username"
@@ -85,7 +95,7 @@ export function AccountEntry({
             maxLength={254}
           />
           <Field
-            label="Пароль"
+            label={t('password')}
             name="password"
             type="password"
             autoComplete="current-password"
@@ -97,7 +107,7 @@ export function AccountEntry({
       {mode === 'login' && challenge && (
         <ActionForm
           key="challenge"
-          submit="Подтвердить вход"
+          submit={t('confirmLogin')}
           onSubmit={async (form) =>
             finish(
               await post<LoginResult>('mfa/verify-login', {
@@ -108,27 +118,29 @@ export function AccountEntry({
           }
         >
           <Field
-            label="Код MFA или резервный код"
+            label={t('mfaCode')}
             name="code"
             autoComplete="one-time-code"
             autoFocus
             required
             maxLength={128}
           />
-          <p className="muted">
-            Резервный код используется только один раз. При истечении challenge начните вход заново.
-          </p>
+          <p className="muted">{t('challengeHint')}</p>
         </ActionForm>
       )}
       {mode === 'register' && (
         <ActionForm
           key="register"
-          submit="Зарегистрироваться"
+          submit={t('create')}
           onSubmit={async (form) => {
             const email = value(form, 'email');
             const result = await post<{ user_id: string; email: string }>('register', {
               email,
               password: value(form, 'password'),
+              locale,
+              ...(value(form, 'referral_code').trim()
+                ? { referral_code: value(form, 'referral_code').trim() }
+                : {}),
             });
             setUserId(result.user_id);
             setRegisteredEmail(result.email);
@@ -136,7 +148,7 @@ export function AccountEntry({
           }}
         >
           <Field
-            label="Email"
+            label={t('email')}
             name="email"
             type="email"
             autoComplete="email"
@@ -144,7 +156,7 @@ export function AccountEntry({
             maxLength={254}
           />
           <Field
-            label="Новый пароль"
+            label={t('newPassword')}
             name="password"
             type="password"
             autoComplete="new-password"
@@ -152,12 +164,19 @@ export function AccountEntry({
             maxLength={1024}
             required
           />
+          <Field
+            label={t('referral')}
+            name="referral_code"
+            autoComplete="off"
+            maxLength={128}
+            defaultValue={params.get('ref') ?? params.get('referral_code') ?? ''}
+          />
         </ActionForm>
       )}
       {mode === 'verify' && (
         <ActionForm
           key="verify"
-          submit="Подтвердить email"
+          submit={t('confirmEmail')}
           onSubmit={async (form) => {
             await post('verify-email', {
               user_id: value(form, 'user_id'),
@@ -166,15 +185,12 @@ export function AccountEntry({
             setMode('login');
           }}
         >
-          <p>Введите код из письма{registeredEmail && ` для ${registeredEmail}`}.</p>
+          <p>
+            {t('emailHint')} {registeredEmail}
+          </p>
+          <Field label={t('userId')} name="user_id" defaultValue={userId} required />
           <Field
-            label="Идентификатор пользователя из регистрации или письма"
-            name="user_id"
-            defaultValue={userId}
-            required
-          />
-          <Field
-            label="Код подтверждения email"
+            label={t('verificationCode')}
             name="code"
             autoComplete="one-time-code"
             required
@@ -185,14 +201,14 @@ export function AccountEntry({
       {mode === 'forgot' && (
         <ActionForm
           key="forgot"
-          submit="Запросить восстановление"
+          submit={t('recover')}
           onSubmit={async (form) => {
             await post('password/forgot', { email: value(form, 'email') });
-            return 'Если аккаунт существует, инструкции отправлены на email.';
+            return t('recoverySent');
           }}
         >
           <Field
-            label="Email"
+            label={t('email')}
             name="email"
             type="email"
             autoComplete="email"
@@ -204,7 +220,7 @@ export function AccountEntry({
       {mode === 'reset' && (
         <ActionForm
           key="reset"
-          submit="Сбросить пароль"
+          submit={t('resetPassword')}
           onSubmit={async (form) => {
             await post('password/reset', {
               token: value(form, 'token'),
@@ -216,7 +232,7 @@ export function AccountEntry({
           }}
         >
           <Field
-            label="Одноразовый токен из письма"
+            label={t('resetToken')}
             name="token"
             defaultValue={resetToken ?? params.get('token') ?? ''}
             required
@@ -224,7 +240,7 @@ export function AccountEntry({
             maxLength={1024}
           />
           <Field
-            label="Новый пароль"
+            label={t('newPassword')}
             name="password"
             type="password"
             autoComplete="new-password"
@@ -232,7 +248,7 @@ export function AccountEntry({
             maxLength={1024}
             required
           />
-          <p className="muted">Сброс отзовёт все активные сессии.</p>
+          <p className="muted">{t('resetHint')}</p>
         </ActionForm>
       )}
     </section>

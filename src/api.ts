@@ -1,3 +1,5 @@
+import { decodeWire, validateCommand } from './wire';
+import { parseStrictJSON } from './generated/validation';
 export class ApiError extends Error {
   constructor(
     message: string,
@@ -9,7 +11,7 @@ export class ApiError extends Error {
 }
 
 type Request = {
-  method?: 'GET' | 'POST' | 'PATCH' | 'DELETE';
+  method?: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
   body?: unknown;
   signal?: AbortSignal;
 };
@@ -18,6 +20,10 @@ export class ApiClient {
   private csrfRequest: Promise<void> | undefined;
   private sessionId: string | null | undefined;
   private generation = 0;
+  private language = globalThis.navigator?.language ?? 'en';
+  setLanguage(locale: 'en' | 'ru') {
+    this.language = locale;
+  }
   constructor(
     private origin = globalThis.location?.origin ?? '',
     private expired: () => void = () => {},
@@ -56,13 +62,21 @@ export class ApiClient {
     if (!this.csrf) throw new Error('Сервер не выдал CSRF-токен. Обновите страницу.');
   }
   async request<T = unknown>(path: string, options: Request = {}): Promise<T> {
+    return (await this.requestWithMetadata<T>(path, options)).data;
+  }
+  async requestWithMetadata<T = unknown>(
+    path: string,
+    options: Request = {},
+  ): Promise<{ data: T; next_cursor: string | null }> {
     if (!path.startsWith('/api/v1/') || path.startsWith('//') || /[\\\r\n]/.test(path))
       throw new Error('Недопустимый адрес API');
     const generation = this.generation;
     const method = options.method ?? 'GET';
+    if (method !== 'GET') validateCommand(path, method, options.body);
     if (method !== 'GET') await this.bootstrapCsrf();
     this.assertCurrent(generation);
     const headers = new Headers({ Accept: 'application/json' });
+    headers.set('Accept-Language', this.language);
     if (options.body !== undefined) headers.set('Content-Type', 'application/json');
     if (method !== 'GET') headers.set('X-CSRF-Token', this.csrf);
     const response = await fetch(new URL(path, this.origin), {
@@ -72,12 +86,19 @@ export class ApiClient {
       redirect: 'error',
       cache: 'no-store',
       body: options.body === undefined ? undefined : JSON.stringify(options.body),
-      signal: options.signal ?? AbortSignal.timeout(15000),
+      signal: options.signal
+        ? AbortSignal.any([options.signal, AbortSignal.timeout(15000)])
+        : AbortSignal.timeout(15000),
     });
-    const data =
-      response.status === 204
-        ? null
-        : ((await response.json().catch(() => null)) as Record<string, unknown> | null);
+    const raw = response.status === 204 ? '' : await response.text();
+    let data: Record<string, unknown> | null = null;
+    if (!response.ok && raw) {
+      try {
+        data = parseStrictJSON(raw) as Record<string, unknown>;
+      } catch {
+        data = null;
+      }
+    }
     this.assertCurrent(generation);
     if (!response.ok) {
       if (response.status === 401) {
@@ -90,7 +111,12 @@ export class ApiClient {
         typeof data?.code === 'string' ? data.code : 'request_failed',
       );
     }
-    return data as T;
+    try {
+      const decoded = (response.status === 204 ? null : decodeWire(path, method, raw)) as T;
+      return { data: decoded, next_cursor: response.headers.get('X-Next-Cursor') || null };
+    } catch {
+      throw new ApiError('invalid_response', 502, 'invalid_response');
+    }
   }
 }
 export const api = new ApiClient(globalThis.location?.origin ?? '', () =>

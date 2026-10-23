@@ -4,7 +4,13 @@ import { createServer, type Server } from 'node:http';
 import { once } from 'node:events';
 import { act, cleanup, render, screen, waitFor, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import App from './App';
+import AppRoot from './App';
+import { I18nProvider } from './i18n';
+const App = () => (
+  <I18nProvider initialLocale="ru">
+    <AppRoot />
+  </I18nProvider>
+);
 let server: Server;
 let base: string;
 let account = 'A';
@@ -35,14 +41,20 @@ beforeAll(async () => {
       return res.end(
         JSON.stringify({
           user: {
-            id: authenticatedAccount,
+            id:
+              authenticatedAccount === 'A'
+                ? '01900000-0000-7000-8000-000000000001'
+                : '01900000-0000-7000-8000-000000000002',
             email: authenticatedAccount + '@example.test',
             is_verified: true,
             mfa_enabled: false,
             roles: [],
             permissions: [],
           },
-          session_id: 'session-' + authenticatedAccount,
+          session_id:
+            authenticatedAccount === 'A'
+              ? '01900000-0000-7000-8000-000000000003'
+              : '01900000-0000-7000-8000-000000000004',
           csrf_token: 'csrf',
         }),
       );
@@ -52,19 +64,35 @@ beforeAll(async () => {
       account = 'A';
       return res.end('{"status":"authenticated"}');
     }
+    if (req.url === '/api/v1/users/me/telegram')
+      return res.end(
+        '{"linked":false,"binding_version":0,"link_pending":false,"candidate_ready":false,"unlink_pending":false}',
+      );
     if (req.url === '/api/v1/users/me')
       return res.end(
         JSON.stringify({
           profile: {
-            user_id: account,
+            user_id:
+              account === 'A'
+                ? '01900000-0000-7000-8000-000000000001'
+                : '01900000-0000-7000-8000-000000000002',
             email: account + '@example.test',
             display_name: 'Name ' + account,
+            avatar_url: null,
+            phone_number: null,
+            website_locale: 'ru',
+            notification_locale: 'en',
+            telegram_linked: false,
+            binding_version: 0,
           },
           notification_settings: {
             email_login_alerts: true,
             email_security_alerts: true,
             telegram_login_alerts: false,
             telegram_security_alerts: false,
+            email_subscription: true,
+            telegram_subscription: false,
+            telegram_trading: false,
           },
           capabilities: { telegram: false },
         }),
@@ -287,4 +315,16 @@ it('finishes the loading boundary when an explicit session expiry supersedes a p
   });
   expect(screen.queryByLabelText('Отображаемое имя')).toBeNull();
   expect(screen.getByRole('button', { name: 'Войти' })).toBeTruthy();
+});
+it('keeps unsaved settings values when the website language changes without changing account', async () => {
+  const user = userEvent.setup();
+  render(<App />);
+  const input = await screen.findByLabelText('Отображаемое имя');
+  await user.clear(input);
+  await user.type(input, 'Unsaved display name');
+  await user.selectOptions(screen.getByLabelText('Язык интерфейса'), 'en');
+  expect((screen.getByLabelText('Display name') as HTMLInputElement).value).toBe(
+    'Unsaved display name',
+  );
+  expect(screen.getByText('A@example.test', { selector: 'header span' })).toBeTruthy();
 });

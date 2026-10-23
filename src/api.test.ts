@@ -26,6 +26,18 @@ beforeAll(async () => {
       }
       return res.end(JSON.stringify({ csrf_token: 'browser-csrf' }));
     }
+    if (req.url === '/api/v1/test/locale' && req.method === 'PUT') {
+      return res.end(
+        JSON.stringify({
+          locale: req.headers['accept-language'],
+          csrf: req.headers['x-csrf-token'],
+        }),
+      );
+    }
+    if (req.url === '/api/v1/test/page') {
+      res.setHeader('X-Next-Cursor', 'opaque-time-and-id');
+      return res.end('[]');
+    }
     if (req.url === '/api/v1/auth/logout' && req.method === 'POST') {
       logoutRequests++;
       if (req.headers['x-csrf-token'] !== 'browser-csrf') {
@@ -124,5 +136,32 @@ describe('cookie API transport', () => {
     client.setSession('session-A', 'browser-csrf');
     await rejected;
     expect(invalidations).toBe(1);
+  });
+  it('sends the chosen locale and CSRF with owner PUT commands', async () => {
+    const client = new ApiClient(origin);
+    client.setLanguage('ru');
+    expect(
+      await client.request('/api/v1/test/locale', { method: 'PUT', body: { expected_version: 1 } }),
+    ).toEqual({ locale: 'ru', csrf: 'browser-csrf' });
+  });
+  it('returns opaque continuation metadata through the same checked session transport', async () => {
+    const client = new ApiClient(origin);
+    const page = await client.requestWithMetadata<unknown[]>('/api/v1/test/page');
+    expect(page.data).toEqual([]);
+    expect(page.next_cursor).toBe('opaque-time-and-id');
+  });
+  it('rejects delayed metadata under an old account without expiring the replacement session', async () => {
+    let invalidations = 0;
+    const client = new ApiClient(origin, () => invalidations++);
+    client.setSession('metadata-A', 'old-session-csrf');
+    const gate = { started: Promise.withResolvers<void>(), resume: Promise.withResolvers<void>() };
+    pausedUnauthorized = gate;
+    const pending = client.requestWithMetadata('/api/v1/users/me');
+    const rejected = expect(pending).rejects.toMatchObject({ code: 'auth_context_changed' });
+    await gate.started.promise;
+    client.setSession('metadata-B', 'browser-csrf');
+    gate.resume.resolve();
+    await rejected;
+    expect(invalidations).toBe(0);
   });
 });
