@@ -76,6 +76,8 @@ export function AdminPanel({ auth }: { auth: AuthSession }) {
   const [commandAuthority, setCommandAuthority] = useState<{ actor: string; permission: string }>();
   const allowed = (permission: string) => canAdmin(auth.user, permission);
   const verified = auth.mfa_verified ?? auth.user.mfa_verified ?? false;
+  const canRecoverCommand =
+    commandAuthority?.actor === auth.user.id && allowed(commandAuthority.permission);
   async function search(next = query) {
     const result = await api.request<AdminUser[]>(
       '/api/v1/admin/users?query=' + encodeURIComponent(next),
@@ -178,7 +180,7 @@ export function AdminPanel({ auth }: { auth: AuthSession }) {
               <div role="status" className="notice">
                 <code>{command.command_id}</code>
                 <p>{text(command.status === 'denied' ? 'commandDenied' : command.status)}</p>
-                {allowed('audit:read') && (
+                {canRecoverCommand && (
                   <ActionButton
                     action={async () => {
                       setCommand(
@@ -192,8 +194,7 @@ export function AdminPanel({ auth }: { auth: AuthSession }) {
                   </ActionButton>
                 )}
                 {(command.status === 'requested' || command.status === 'unknown') &&
-                  commandAuthority?.actor === auth.user.id &&
-                  allowed(commandAuthority.permission) && (
+                  canRecoverCommand && (
                     <ActionButton
                       action={async () => {
                         const result = await api.request<Command>(

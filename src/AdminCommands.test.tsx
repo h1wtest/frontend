@@ -207,11 +207,8 @@ it('never substitutes the OWNER role for session-revoke permission or fresh MFA'
   expect(screen.queryByRole('button', { name: 'Find users' })).toBeNull();
   expect(screen.queryByRole('button', { name: 'Revoke sessions' })).toBeNull();
 });
-it('keeps command status reads observational and resumes only through an explicit CSRF-protected POST with the same journal ID', async () => {
-  const actor = {
-    ...auth,
-    user: { ...auth.user, permissions: [...auth.user.permissions, 'audit:read'] },
-  };
+it('lets SUPPORT inspect and resume its own command without broad audit access through an explicit CSRF-protected POST', async () => {
+  const actor = auth;
   const user = userEvent.setup();
   render(
     <I18nProvider initialLocale="en">
@@ -223,6 +220,7 @@ it('keeps command status reads observational and resumes only through an explici
   await user.type(screen.getByLabelText('Reason'), 'Lost device');
   await user.click(screen.getByRole('button', { name: 'Revoke sessions' }));
   await screen.findByText('Result unknown; check before retrying');
+  expect(screen.queryByRole('button', { name: 'Refresh audit' })).toBeNull();
   await user.click(screen.getByRole('button', { name: 'Check command result' }));
   expect(statusReads).toBe(1);
   expect(resumes).toHaveLength(0);
@@ -239,3 +237,40 @@ it('keeps command status reads observational and resumes only through an explici
   ]);
   expect(screen.queryByRole('button', { name: 'Resume command' })).toBeNull();
 });
+
+it.each(['different actor', 'revoked permission'] as const)(
+  'hides recovery controls after the original command authority changes: %s',
+  async (change) => {
+    const user = userEvent.setup();
+    const view = render(
+      <I18nProvider initialLocale="en">
+        <AdminPanel auth={auth} />
+      </I18nProvider>,
+    );
+    await user.click(screen.getByRole('button', { name: 'Find users' }));
+    await screen.findByText('ordinary@example.test');
+    await user.type(screen.getByLabelText('Reason'), 'Lost device');
+    await user.click(screen.getByRole('button', { name: 'Revoke sessions' }));
+    await screen.findByText('Result unknown; check before retrying');
+    const updated = {
+      ...auth,
+      user: {
+        ...auth.user,
+        id: change === 'different actor' ? userId : auth.user.id,
+        permissions:
+          change === 'revoked permission'
+            ? ['users:read', 'audit:read']
+            : [...auth.user.permissions, 'audit:read'],
+      },
+    };
+    view.rerender(
+      <I18nProvider initialLocale="en">
+        <AdminPanel auth={updated} />
+      </I18nProvider>,
+    );
+    expect(screen.queryByRole('button', { name: 'Check command result' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Resume command' })).toBeNull();
+    expect(statusReads).toBe(0);
+    expect(resumes).toHaveLength(0);
+  },
+);

@@ -59,7 +59,8 @@ export function parseStrictJSON(text:string):unknown {
   if(text[at]==='['){at++;const out:unknown[]=[];ws();if(text[at]===']'){at++;return out;}while(true){out.push(value(depth+1));ws();const delimiter=text[at++];if(delimiter===']')return out;if(delimiter!==',')throw new SyntaxError('Comma required');}}
   const start=at;while(at<text.length&&!/[ \t\r\n,}\]]/.test(text[at]))at++;if(start===at)throw new SyntaxError('Value required');const token=text.slice(start,at);
   if(/^-?(0|[1-9][0-9]*)$/.test(token)){const integer=BigInt(token);return integer>BigInt(Number.MAX_SAFE_INTEGER)||integer<BigInt(Number.MIN_SAFE_INTEGER)?integer:Number(token);}
-  return JSON.parse(token) as unknown;
+  if(token==='true')return true;if(token==='false')return false;if(token==='null')return null;
+  throw new SyntaxError('Canonical integer or JSON literal required');
  };
  const result=value(0);ws();if(at!==text.length)throw new SyntaxError('Trailing JSON');return result;
 }

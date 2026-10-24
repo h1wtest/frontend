@@ -123,6 +123,25 @@ export const accountMessages = {
   notificationAdmin: { en: 'Notification administration', ru: 'Управление уведомлениями' },
   templates: { en: 'Notification templates', ru: 'Шаблоны уведомлений' },
   publishTemplate: { en: 'Publish template', ru: 'Опубликовать шаблон' },
+  newTemplateRevision: {
+    en: 'A newer revision is available. Your draft still uses its original version.',
+    ru: 'Доступна новая версия. Черновик по-прежнему использует исходную версию.',
+  },
+  reloadTemplate: {
+    en: 'Discard draft and reload latest revision',
+    ru: 'Отменить правки и загрузить последнюю версию',
+  },
+  templateVariables: {
+    en: 'Focus a subject or body, then insert an allowed variable at the cursor. Only variables provided by this event are available.',
+    ru: 'Выберите тему или текст и вставьте разрешённую переменную в позицию курсора. Доступны только переменные этого события.',
+  },
+  insertVariable: { en: 'Insert', ru: 'Вставить' },
+  previewTemplate: { en: 'Preview template', ru: 'Предпросмотр шаблона' },
+  templatePreview: { en: 'Template preview', ru: 'Предпросмотр шаблона' },
+  templatePreviewSamples: {
+    en: 'Rendered by the server with fixed, nonsecret sample values. Preview does not publish or send a notification.',
+    ru: 'Сервер использует фиксированные примеры без секретов. Предпросмотр не публикует шаблон и не отправляет уведомление.',
+  },
   enSubject: { en: 'EN subject', ru: 'EN тема' },
   enBody: { en: 'EN body', ru: 'EN текст' },
   ruSubject: { en: 'RU subject', ru: 'RU тема' },
